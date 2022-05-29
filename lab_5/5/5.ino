@@ -1,10 +1,11 @@
 #include <Wire.h>
-
+#include "DHT.h"
 #include <LiquidCrystal.h>
+#include <math.h>
 
-
-// initialize the library by associating any needed LCD interface pin
-// with the arduino pin number it is connected to
+#define DHTTYPE DHT11
+#define sensorPin A0
+DHT dht(sensorPin, DHTTYPE);
 const int rs = 13,
   en = 12,
   d4 = 11,
@@ -13,69 +14,65 @@ const int rs = 13,
   d7 = 8;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-const int buttonPin2 = 6; //button pin for incrementing
-const int buttonPin3 = 5; //button pin for decrementing
-const int buttonPin4 = 4; //button pin for incrementing
-const int buttonPin5 = 3; //button pin for decrementing
 const int motorPort1 = A4;
 const int motorPort2 = A5;
+const int LDR_port = A1;
+const int GAS_port = A2;
+const int led_port = 6;
 
-const int sensorPin = A0;
 const int heaterPort = 7;
-int treshold = 20;
-int speed = 150;
+int tempTreshold = 27;
+int humidTreshold = 75;
+int lightTreshold = 900;
+int co2Treshold = 300;
+int speed = 250;
 
 void setup() {
-  // pinMode (aqSensor,INPUT); // MQ135 is connected as INPUT to arduino
   pinMode(7, OUTPUT);
+  pinMode(led_port, OUTPUT);
   lcd.begin(16, 4);
-  lcd.print("Starting");
-  pinMode(buttonPin2, INPUT);
-  pinMode(buttonPin3, INPUT);
-  pinMode(buttonPin4, INPUT);
-  pinMode(buttonPin5, INPUT);
-  // delay(1000);
+  lcd.print("Starting...");
+  delay(1000);
+  dht.begin();
+  lcd.setCursor(0, 0);lcd.print("T(C)|H(%) |L(%)|C(%) ");
+  lcd.setCursor(4, 1);lcd.print("|");
+  lcd.setCursor(10, 1);lcd.print("|");
+  lcd.setCursor(15, 1);lcd.print("|");
 }
 
 void loop() {
-  int reading = analogRead(sensorPin);
-  
-  if (digitalRead(buttonPin2) == LOW) {
-    while (digitalRead(buttonPin2) == LOW) {};
-    treshold++;
-  }
-  if (digitalRead(buttonPin3) == LOW) {
-    while (digitalRead(buttonPin3) == LOW) {};
-    treshold--;
-  }
-  if (digitalRead(buttonPin4) == LOW) {
-    while (digitalRead(buttonPin4) == LOW) {};
-    speed++;
-  }
-  if (digitalRead(buttonPin5) == LOW) {
-    while (digitalRead(buttonPin5) == LOW) {};
-    speed--;
-  }
-  
+  int humid = dht.readHumidity();
+  int temp = dht.readTemperature();
+  int LDR = analogRead(LDR_port); 
+  int GAS1 = analogRead(GAS_port); 
 
-  // converting that reading to voltage, for 3.3v arduino use 3.3
-  float voltage = reading * 5.0;
-  voltage /= 1024.0;
+  int GAS = GAS1 / 100;
+  GAS = ceil( GAS );
+  GAS = GAS * 10;
 
-  // now print out the temperature
-  float temperatureC = (voltage - 0.5) * 100; //converting from 10 mv per degree with 500 mV offset                                                      
-  lcd.setCursor(0, 0);lcd.print("Current ");lcd.print(temperatureC);lcd.println(F(" \xDF""C"));
-  lcd.setCursor(0, 1);lcd.print("Goal ");lcd.println(treshold);lcd.print(F("\xDF""C"));
-  lcd.setCursor(0, 2);lcd.print("Speed ");lcd.println(speed);   
-  
-  if (temperatureC < treshold) {
+  lcd.setCursor(1, 1);lcd.print(temp);
+  lcd.setCursor(6, 1);lcd.print(humid);
+  lcd.setCursor(12, 1);lcd.print(LDR / 10);
+  lcd.setCursor(17, 1);lcd.print(GAS);
+ 
+  if (temp < tempTreshold) {
     digitalWrite(heaterPort, HIGH);
+  }
+  if (temp > tempTreshold) {
+    digitalWrite(heaterPort, LOW);
+  }
+  if (humid < humidTreshold or GAS1 < co2Treshold or temp < tempTreshold) {
     analogWrite(motorPort2, 0);
     analogWrite(motorPort1, 0);
   }
-  if (temperatureC > treshold) {
-    digitalWrite(heaterPort, LOW);
+  if (humid > humidTreshold or GAS1 > co2Treshold or temp > tempTreshold){
     analogWrite(motorPort2, speed);
     analogWrite(motorPort1, 0);
   }
+  if (LDR > 900) {
+    digitalWrite(led_port, LOW);
+  }
+  if (LDR < 900) {
+    digitalWrite(led_port, HIGH);
+  }   
 }
